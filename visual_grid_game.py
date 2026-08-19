@@ -49,20 +49,29 @@ class VisualGridHuntGame:
         self.score = 0
         self.steps = 0
         self.collision = False
+        self.last_action = 'Right'
 
     def get_percept(self) -> dict:
+        ax, ay = self.agent_pos
+
+        if self.last_action == 'Up':
+            forward = (ax, ay + 1)
+        elif self.last_action == 'Down':
+            forward = (ax, ay - 1)
+        elif self.last_action == 'Left':
+            forward = (ax - 1, ay)
+        else:  # 'Right'
+            forward = (ax + 1, ay)
+
+        out_of_bounds = not (0 <= forward[0] < self.width and 0 <= forward[1] < self.height)
+
         return {
-            'agent_pos': list(self.agent_pos),
-            'opponent_positions': [list(op) for op in self.opponents],
-            'smells_food': tuple(self.agent_pos) in self.food_positions,
-            'hit_wall': tuple(self.agent_pos) in self.walls,
-            'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,  # NEW sensor
-            'collision': self.collision,
-            'score': self.score,
-            'remaining_food': len(self.food_positions)
+            'wall_ahead': forward in self.walls or out_of_bounds,
+            'food_here': tuple(self.agent_pos) in self.food_positions,
         }
 
     def execute_action(self, action: str):
+        self.last_action = action
         self.steps += 1
         new_pos = list(self.agent_pos)
 
@@ -191,14 +200,18 @@ class GridGameGUI:
         self.canvas.create_oval(x1, y1, x1 + self.cell_size * 0.7, y1 + self.cell_size * 0.7, fill="#000066",
                                 outline="#1e3a8a")
 
-    def run_loop(self):
+    def run_loop(self, agent=None):
         self.btn.config(state="disabled")
 
         def step():
             if not self.env.is_done():
-                action = random.choice(['Up', 'Down', 'Left', 'Right'])
-                self.env.execute_action(action)
+                if agent is not None:
+                    percept = self.env.get_percept()
+                    action = agent.sense_and_act(percept)
+                else:
+                    action = random.choice(['Up', 'Down', 'Left', 'Right'])
 
+                self.env.execute_action(action)
                 self.draw_grid()
                 self.label.config(text=f"Score: {self.env.score} | Steps: {self.env.steps} | Action: {action}")
                 self.root.after(250, step)
@@ -209,9 +222,16 @@ class GridGameGUI:
 
         step()
 
+                
+
 
 if __name__ == "__main__":
+    from agent import SimpleReflexAgent, ModelBasedAgent
+
     root = tk.Tk()
-    # Try a larger grid size like 12x12 with 15 food and 3 opponents!
     app = GridGameGUI(root, width=12, height=12, num_food=15, num_opponents=0)
+
+    my_agent = SimpleReflexAgent()   # මුලින් මේකෙන් run කරලා loop එක බලමු
+    app.btn.config(command=lambda: app.run_loop(my_agent))
+
     root.mainloop()
